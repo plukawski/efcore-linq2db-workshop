@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using LinqToDB.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using NorthwindDataAccess.Entities;
 using System;
 using System.Collections.Generic;
@@ -40,6 +41,18 @@ WHERE [e].[HireDate] > '2021-08-01T00:00:00.000'
         WHERE [EmployeeID] = @p83;
         SELECT @@ROWCOUNT;
          */
+
+        public async Task UpdateEmployeesLinq2DbAsync()
+        {
+            var updateQuery = from e in context.Employees
+                              where e.HireDate > new DateTime(2021, 08, 01)
+                              select e;
+
+            await LinqToDB.LinqExtensions.UpdateAsync(updateQuery.ToLinqToDB(), x => new Employee() 
+            { 
+                HireDate = x.HireDate != null ? x.HireDate.Value.AddSeconds(1) : null
+            });
+        }
 
         public async Task InsertLotOfRecordsEfCoreAsync()
         {
@@ -117,6 +130,22 @@ ORDER BY [i].[_Position];
 '
          */
 
+        public async Task InsertLotOfRecordsLinq2DbAsync()
+        {
+            List<Employee> newEmployees = new List<Employee>();
+            for (int i = 1; i < 1000; i++)
+            {
+                newEmployees.Add(new Employee()
+                {
+                    FirstName = $"efcore",
+                    LastName = $"Last name {i}",
+                    HireDate = (new DateTime(2016, 1, 1)).AddSeconds(i)
+                });
+            }
+
+            await context.BulkCopyAsync(new LinqToDB.Data.BulkCopyOptions(), newEmployees);
+        }
+
         public async Task UpsertProductSpDemoAsync(string productName)
         {
             await context.Database.ExecuteSqlRawAsync("EXEC demo_UpsertProduct {0}", productName);
@@ -174,6 +203,36 @@ ORDER BY [i].[_Position];
             }
 
             await context.SaveChangesAsync();
+            await transaction.CommitAsync();
+        }
+
+        public async Task UpsertProductDemoLinq2DbAsync(string productName)
+        {
+            await using var transaction = await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+            int rowsAffected = await LinqToDB.LinqExtensions.UpdateAsync(context.Products
+                .Where(x => x.ProductName == productName).ToLinqToDB(), x => new Product 
+                { 
+                    UnitsInStock = x.UnitsInStock != null 
+                        ? (short)(x.UnitsInStock.Value + 1) 
+                        : (short)0
+                });
+
+            if (rowsAffected == 0)
+            {
+                var product = new Product()
+                {
+                    ProductName = productName,
+                    UnitsInStock = 0,
+                    CategoryId = 1,
+                    SupplierId = 1,
+                    UnitPrice = 1,
+                    UnitsOnOrder = 0,
+                    QuantityPerUnit = "1",
+                };
+
+                context.Products.Add(product);
+                await context.SaveChangesAsync();
+            }
             await transaction.CommitAsync();
         }
     }

@@ -11,8 +11,9 @@ namespace Linq2DbSynergyWorkshop
         static async Task Main(string[] args)
         {
             Startup startup = new Startup(ParseParameters(args));
+            TestStartup testStartup = new TestStartup(ParseParameters(args));
             IServiceCollection services = new ServiceCollection();
-            startup.ConfigureServices(services);
+            testStartup.ConfigureServices(services);
             using var mainContainer = services.BuildServiceProvider();
             using (var mainContainerScope = mainContainer.CreateScope())
             {
@@ -27,6 +28,7 @@ namespace Linq2DbSynergyWorkshop
                 //await runner.IterationsAsLethalSins_Excercise7();
             }
 
+            testStartup.sqliteConnection?.Close();
             Console.WriteLine("Excercise ended!");
             Console.ReadKey();
         }

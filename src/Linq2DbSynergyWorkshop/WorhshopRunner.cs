@@ -49,6 +49,10 @@ namespace Linq2DbSynergyWorkshop
             {
                 await modifyDataDao.UpdateEmployeesEfCoreAsync();
             }
+            using (Stopper stopper = new Stopper("Linq2db update"))
+            {
+                await modifyDataDao.UpdateEmployeesLinq2DbAsync();
+            }
             Console.WriteLine("-------Batch UPDATE-------");
         }
 
@@ -59,6 +63,11 @@ namespace Linq2DbSynergyWorkshop
             {
                 await modifyDataDao.InsertLotOfRecordsEfCoreAsync();
             }
+
+            using (Stopper stopper = new Stopper("Linq2Db batch insertion"))
+            {
+                await modifyDataDao.InsertLotOfRecordsLinq2DbAsync();
+            }
             Console.WriteLine("-------Batch INSERT-------");
         }
 
@@ -68,6 +77,7 @@ namespace Linq2DbSynergyWorkshop
             IQueryDemoDataDao queryDataDao = container.GetService<IQueryDemoDataDao>();
             Random random = new Random();
             string productName = $"upsert_{random.Next()}";
+            string linq2DbProductName = $"upsert_linq2db_{random.Next()}";
             string wrongProductName = $"wrongupsert_{random.Next()}";
 
             var tasks = new List<Task>();
@@ -124,10 +134,38 @@ namespace Linq2DbSynergyWorkshop
                 }
             }
 
+            tasks = new List<Task>();
+            using (Stopper stopper = new Stopper("Linq2db Upsert"))
+            {
+                for (int i = 0; i < 10; i++)
+                {
+                    tasks.Add(Task.Run(async () =>
+                    {
+                        using var containerScope = container.CreateScope();
+                        IModifyDemoDataDao modifyDataDao = containerScope.ServiceProvider.GetService<IModifyDemoDataDao>();
+                        await retryPolisy.ExecuteAsync(async () =>
+                        {
+                            await modifyDataDao.UpsertProductDemoLinq2DbAsync(linq2DbProductName);
+                        });
+                    }));
+                }
+
+                try
+                {
+                    await Task.WhenAll(tasks.ToArray());
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Linq2Db Upsert - Errors occured during execution:{ex.Message}");
+                }
+            }
+
             int wrongProductsCount = await queryDataDao.GetProductCountAsync(wrongProductName);
             int productsCount = await queryDataDao.GetProductCountAsync(productName);
+            int linq2DbProductsCount = await queryDataDao.GetProductCountAsync(linq2DbProductName);
             Console.WriteLine($"Wrong Upsert - number of products in db: {wrongProductsCount}");
             Console.WriteLine($"Upsert - number of products in db: {productsCount}");
+            Console.WriteLine($"Linq2Db Upsert - number of products in db: {linq2DbProductsCount}");
 
             Console.WriteLine("-------UPSERT-------");
         }

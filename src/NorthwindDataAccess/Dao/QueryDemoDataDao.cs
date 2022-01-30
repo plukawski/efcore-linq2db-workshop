@@ -1,6 +1,8 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using LinqToDB.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using NorthwindDataAccess.Dto.QueryDataDemo;
 using NorthwindDataAccess.Entities;
+using NorthwindDataAccess.Extensions;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -39,6 +41,7 @@ namespace NorthwindDataAccess.Dao
                     ProductName = x.ProductName,
                     UnitPrice = x.UnitPrice
                 })
+                .ToLinqToDB()
                 .ToListAsync();
         }
 
@@ -58,11 +61,12 @@ namespace NorthwindDataAccess.Dao
         public async Task<List<Product>> FilterProductsAsync(string productName, string supplierCompanyName)
         {
             var query = from p in context.Products
-                            .Where(x => x.ProductName.StartsWith(productName) 
-                                || x.Supplier.CompanyName.StartsWith(supplierCompanyName))
+                            .ConditionalWhere(() => !string.IsNullOrWhiteSpace(productName), x => x.ProductName.StartsWith(productName))
+                            .ConditionalWhere(() => !string.IsNullOrWhiteSpace(supplierCompanyName), x => x.Supplier.CompanyName.StartsWith(supplierCompanyName))
                         select p;
 
             return await query
+                .ToLinqToDB()
                 .ToListAsync();
         }
 
@@ -95,19 +99,41 @@ namespace NorthwindDataAccess.Dao
         
         public async Task<List<PagingResultsWithTotalCount>> PagedResultsWithCountAllDemoAsync(int page, int pageSize)
         {
-            string sql = @"
-            SELECT 
-		        p.ProductName, 
-		        p.UnitPrice,
-		        COUNT(*) OVER() AS TotalCount,
-                MIN(UnitPrice) OVER (PARTITION BY p.SupplierID) AS MinUnitPricePerSupplier
-	        From Products p
-	        WHERE p.ReorderLevel > 20
-            ORDER BY p.ProductName
-            OFFSET @p0 ROWS FETCH NEXT @p1 ROWS ONLY";
+            //   string sql = @"
+            //   SELECT 
+            // p.ProductName, 
+            // p.UnitPrice,
+            // COUNT(*) OVER() AS TotalCount,
+            //       MIN(UnitPrice) OVER (PARTITION BY p.SupplierID) AS MinUnitPricePerSupplier
+            //From Products p
+            //WHERE p.ReorderLevel > 20
+            //   ORDER BY p.ProductName
+            //   OFFSET @p0 ROWS FETCH NEXT @p1 ROWS ONLY";
 
-            return await context.PaginResultsWithTotalCount
-                .FromSqlRaw(sql, page, pageSize)
+            //   return await context.PaginResultsWithTotalCount
+            //       .FromSqlRaw(sql, page, pageSize)
+            //       .ToListAsync();
+
+            var query = from p in context.Products
+                        where p.ReorderLevel > 20
+                        orderby p.ProductName
+                        select new PagingResultsWithTotalCount
+                        {
+                            ProductName = p.ProductName,
+                            UnitPrice = p.UnitPrice ?? 0,
+                            TotalCount = LinqToDB.AnalyticFunctions.Count(LinqToDB.Sql.Ext)
+                                .Over()
+                                .ToValue(),
+                            MinUnitPricePerSupplier = LinqToDB.AnalyticFunctions.Min(LinqToDB.Sql.Ext, p.UnitPrice ?? 0)
+                                .Over()
+                                .PartitionBy(p.SupplierId)
+                                .ToValue()
+                        };
+
+            return await query
+                .Skip(page * pageSize)
+                .Take(pageSize)
+                .ToLinqToDB()
                 .ToListAsync();
         }
 
@@ -153,6 +179,7 @@ namespace NorthwindDataAccess.Dao
         public void WarmupOrms()
         {
             context.Products.Count();
+            context.Products.ToLinqToDB().Count();
         }
     }
 }

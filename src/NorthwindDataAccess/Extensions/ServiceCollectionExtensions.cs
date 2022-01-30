@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using LinqToDB.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NorthwindDataAccess.Dao;
 
@@ -8,6 +9,7 @@ namespace NorthwindDataAccess.Extensions
     {
         public static void AddNorthwindDemoDataAccess(this IServiceCollection services, string connectionString)
         {
+            LinqToDBForEFTools.Initialize();
             var options = new DbContextOptionsBuilder<NorthwindContext>()
                     .UseSqlServer(connectionString)
                     .Options;
