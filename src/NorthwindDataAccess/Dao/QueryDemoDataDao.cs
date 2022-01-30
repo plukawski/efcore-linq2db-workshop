@@ -58,8 +58,8 @@ namespace NorthwindDataAccess.Dao
         public async Task<List<Product>> FilterProductsAsync(string productName, string supplierCompanyName)
         {
             var query = from p in context.Products
-                            .Where(x => x.ProductName.StartsWith(productName) 
-                                || x.Supplier.CompanyName.StartsWith(supplierCompanyName))
+                            .Where(x => (productName == null || x.ProductName.StartsWith(productName))
+                                && (supplierCompanyName == null || x.Supplier.CompanyName.StartsWith(supplierCompanyName)))
                         select p;
 
             return await query
